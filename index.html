@@ -20,7 +20,6 @@
     <div id="app" class="p-4 max-w-md mx-auto"></div>
 
     <script>
-        // Google Form Configuration
         const FORM_ID = '1FAIpQLScPbbHbPdZKrJKLVgNg5bTEGYMiXWNdCGuDt8blE4y7tFcGjw';
         const FIELD_IDS = {
             date: '1103775473',
@@ -45,7 +44,6 @@
             night: 'Night'
         };
 
-        // State
         let entries = [];
         let selectedSlot = null;
         let pendingScore = null;
@@ -53,7 +51,6 @@
         let view = 'tracker';
         let syncStatus = null;
 
-        // Utility functions
         const getTodayKey = () => {
             const today = new Date();
             return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -80,7 +77,6 @@
         };
 
         const getTodayEntries = () => entries.filter(e => e.date === getTodayKey());
-        
         const getEntryForSlot = (slotId) => entries.find(e => e.date === getTodayKey() && e.slot === slotId);
 
         const getTodayAverage = () => {
@@ -96,361 +92,86 @@
                 date.setDate(date.getDate() - i);
                 const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
                 const dayEntries = entries.filter(e => e.date === dateKey);
-                const avg = dayEntries.length > 0 
-                    ? dayEntries.reduce((sum, e) => sum + e.score, 0) / dayEntries.length 
-                    : null;
-                days.push({
-                    date: dateKey,
-                    label: date.toLocaleDateString('en-GB', { weekday: 'short' }),
-                    average: avg,
-                    count: dayEntries.length
-                });
+                const avg = dayEntries.length > 0 ? dayEntries.reduce((sum, e) => sum + e.score, 0) / dayEntries.length : null;
+                days.push({ date: dateKey, label: date.toLocaleDateString('en-GB', { weekday: 'short' }), average: avg, count: dayEntries.length });
             }
             return days;
         };
 
-        // Storage
-        const saveToStorage = () => {
-            localStorage.setItem('mood-entries', JSON.stringify(entries));
-        };
+        const saveToStorage = () => { localStorage.setItem('mood-entries', JSON.stringify(entries)); };
+        const loadFromStorage = () => { try { const saved = localStorage.getItem('mood-entries'); if (saved) entries = JSON.parse(saved); } catch (e) {} };
 
-        const loadFromStorage = () => {
-            try {
-                const saved = localStorage.getItem('mood-entries');
-                if (saved) entries = JSON.parse(saved);
-            } catch (e) {
-                console.error('Failed to load:', e);
-            }
-        };
-
-        // Google Form submission
-        const submitToGoogleForm = (date, slot, score, note) => {
+        const submitToGoogleForm = (date, slot, score) => {
             return new Promise((resolve) => {
                 const params = new URLSearchParams();
                 params.append(`entry.${FIELD_IDS.date}`, date);
                 params.append(`entry.${FIELD_IDS.slot}`, SLOT_LABELS[slot]);
                 params.append(`entry.${FIELD_IDS.score}`, score.toString());
-                params.append(`entry.${FIELD_IDS.notes}`, note || '');
-
                 const formUrl = `https://docs.google.com/forms/d/e/${FORM_ID}/formResponse?${params.toString()}`;
-
-                // Use fetch with no-cors mode
-                fetch(formUrl, { method: 'GET', mode: 'no-cors' })
-                    .then(() => resolve(true))
-                    .catch(() => resolve(true)); // Still succeeds even on "error"
-                
-                // Backup: image beacon
-                const img = new Image();
-                img.src = formUrl;
+                fetch(formUrl, { method: 'GET', mode: 'no-cors' }).then(() => resolve(true)).catch(() => resolve(true));
+                const img = new Image(); img.src = formUrl;
             });
         };
 
-        // Actions
         const selectSlot = (slotId) => {
-            if (selectedSlot === slotId) {
-                selectedSlot = null;
-                pendingScore = null;
-            } else {
-                selectedSlot = slotId;
-                pendingScore = null;
-                const existing = getEntryForSlot(slotId);
-                noteText = existing?.note || '';
-            }
+            if (selectedSlot === slotId) { selectedSlot = null; pendingScore = null; }
+            else { selectedSlot = slotId; pendingScore = null; const existing = getEntryForSlot(slotId); noteText = existing?.note || ''; }
             render();
         };
 
-        const selectScore = (score) => {
-            pendingScore = score;
-            const existing = getEntryForSlot(selectedSlot);
-            noteText = existing?.note || '';
-            render();
-        };
+        const selectScore = (score) => { pendingScore = score; const existing = getEntryForSlot(selectedSlot); noteText = existing?.note || ''; render(); };
 
         const saveEntry = async () => {
             if (!selectedSlot || !pendingScore) return;
-
-            syncStatus = 'syncing';
-            render();
-
+            syncStatus = 'syncing'; render();
             const todayKey = getTodayKey();
-            
-            // Submit to Google Form
-            await submitToGoogleForm(todayKey, selectedSlot, pendingScore, noteText.trim());
-
-            // Save locally
-            const entryData = {
-                date: todayKey,
-                slot: selectedSlot,
-                score: pendingScore,
-                note: noteText.trim(),
-                timestamp: Date.now()
-            };
-
+            await submitToGoogleForm(todayKey, selectedSlot, pendingScore);
+            const entryData = { date: todayKey, slot: selectedSlot, score: pendingScore, note: noteText.trim(), timestamp: Date.now() };
             const existingIndex = entries.findIndex(e => e.date === todayKey && e.slot === selectedSlot);
-            if (existingIndex >= 0) {
-                entries[existingIndex] = entryData;
-            } else {
-                entries.push(entryData);
-            }
-
+            if (existingIndex >= 0) { entries[existingIndex] = entryData; } else { entries.push(entryData); }
             saveToStorage();
-
-            syncStatus = 'synced';
-            render();
-
-            setTimeout(() => {
-                syncStatus = null;
-                selectedSlot = null;
-                pendingScore = null;
-                noteText = '';
-                render();
-            }, 1500);
+            syncStatus = 'synced'; render();
+            setTimeout(() => { syncStatus = null; selectedSlot = null; pendingScore = null; noteText = ''; render(); }, 1500);
         };
 
-        const clearData = () => {
-            if (confirm('Clear all mood data? This cannot be undone.')) {
-                entries = [];
-                localStorage.removeItem('mood-entries');
-                render();
-            }
-        };
+        const clearData = () => { if (confirm('Clear all mood data? This cannot be undone.')) { entries = []; localStorage.removeItem('mood-entries'); render(); } };
 
-        // Render
         const render = () => {
             const app = document.getElementById('app');
             const todayAvg = getTodayAverage();
             const weekData = getWeekData();
-
-            if (view === 'export') {
-                renderExport(app);
-                return;
-            }
-
+            if (view === 'export') { renderExport(app); return; }
             app.innerHTML = `
                 <div class="text-center mb-6">
                     <h1 class="text-3xl font-bold text-purple-700 mb-1">Mood Tracker</h1>
                     <p class="text-purple-500">${formatDate(getTodayKey())}</p>
                     <p class="text-xs text-green-600 mt-1">☁️ Syncing to Google Sheets</p>
                 </div>
-
-                ${syncStatus ? `
-                    <div class="text-center text-sm py-2 px-4 rounded-full mb-4 ${
-                        syncStatus === 'syncing' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'
-                    }">
-                        ${syncStatus === 'syncing' ? '☁️ Syncing...' : '✓ Saved to Google Sheets'}
-                    </div>
-                ` : ''}
-
-                ${todayAvg ? `
-                    <div class="bg-white rounded-2xl p-4 mb-6 shadow-lg text-center">
-                        <p class="text-gray-500 text-sm mb-1">Today's Average</p>
-                        <div class="flex items-center justify-center gap-3">
-                            <span class="text-4xl">${getScoreEmoji(parseFloat(todayAvg))}</span>
-                            <span class="text-4xl font-bold text-purple-600">${todayAvg}</span>
-                        </div>
-                        <p class="text-gray-400 text-sm mt-1">${getTodayEntries().length} of 5 logged</p>
-                    </div>
-                ` : ''}
-
-                <div class="bg-white rounded-2xl p-4 mb-6 shadow-lg">
-                    <h2 class="text-lg font-semibold text-gray-700 mb-4">Log Your Mood</h2>
-                    <div class="space-y-3">
-                        ${TIME_SLOTS.map(slot => renderSlot(slot)).join('')}
-                    </div>
-                </div>
-
-                <div class="bg-white rounded-2xl p-4 mb-6 shadow-lg">
-                    <h2 class="text-lg font-semibold text-gray-700 mb-4">This Week</h2>
-                    <div class="flex justify-between items-end h-32">
-                        ${weekData.map((day, i) => `
-                            <div class="flex flex-col items-center flex-1">
-                                <div class="flex-1 w-full flex items-end justify-center mb-1">
-                                    ${day.average ? `
-                                        <div class="w-8 rounded-t-lg ${getScoreColor(day.average)} transition-all" style="height: ${day.average * 10}%">
-                                            <div class="text-white text-xs font-bold text-center pt-1">${Math.round(day.average)}</div>
-                                        </div>
-                                    ` : `
-                                        <div class="w-8 h-4 rounded-t-lg bg-gray-200"></div>
-                                    `}
-                                </div>
-                                <p class="text-xs ${i === 6 ? 'font-bold text-purple-600' : 'text-gray-500'}">${day.label}</p>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-
-                <div class="text-center space-y-2">
-                    <button onclick="view='export';render()" class="w-full max-w-xs mx-auto block p-3 bg-white text-purple-600 rounded-xl font-semibold shadow-lg hover:bg-purple-50 transition-colors">
-                        📤 Export for Doctor
-                    </button>
-                    <button onclick="clearData()" class="text-gray-400 text-sm hover:text-red-400 transition-colors">
-                        Reset All Data
-                    </button>
-                </div>
-            `;
+                ${syncStatus ? `<div class="text-center text-sm py-2 px-4 rounded-full mb-4 ${syncStatus === 'syncing' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'}">${syncStatus === 'syncing' ? '☁️ Syncing...' : '✓ Saved to Google Sheets'}</div>` : ''}
+                ${todayAvg ? `<div class="bg-white rounded-2xl p-4 mb-6 shadow-lg text-center"><p class="text-gray-500 text-sm mb-1">Today's Average</p><div class="flex items-center justify-center gap-3"><span class="text-4xl">${getScoreEmoji(parseFloat(todayAvg))}</span><span class="text-4xl font-bold text-purple-600">${todayAvg}</span></div><p class="text-gray-400 text-sm mt-1">${getTodayEntries().length} of 5 logged</p></div>` : ''}
+                <div class="bg-white rounded-2xl p-4 mb-6 shadow-lg"><h2 class="text-lg font-semibold text-gray-700 mb-4">Log Your Mood</h2><div class="space-y-3">${TIME_SLOTS.map(slot => renderSlot(slot)).join('')}</div></div>
+                <div class="bg-white rounded-2xl p-4 mb-6 shadow-lg"><h2 class="text-lg font-semibold text-gray-700 mb-4">This Week</h2><div class="flex justify-between items-end h-32">${weekData.map((day, i) => `<div class="flex flex-col items-center flex-1"><div class="flex-1 w-full flex items-end justify-center mb-1">${day.average ? `<div class="w-8 rounded-t-lg ${getScoreColor(day.average)} transition-all" style="height: ${day.average * 10}%"><div class="text-white text-xs font-bold text-center pt-1">${Math.round(day.average)}</div></div>` : `<div class="w-8 h-4 rounded-t-lg bg-gray-200"></div>`}</div><p class="text-xs ${i === 6 ? 'font-bold text-purple-600' : 'text-gray-500'}">${day.label}</p></div>`).join('')}</div></div>
+                <div class="text-center space-y-2"><button onclick="view='export';render()" class="w-full max-w-xs mx-auto block p-3 bg-white text-purple-600 rounded-xl font-semibold shadow-lg hover:bg-purple-50 transition-colors">📤 Export for Doctor</button><button onclick="clearData()" class="text-gray-400 text-sm hover:text-red-400 transition-colors">Reset All Data</button></div>`;
         };
 
         const renderSlot = (slot) => {
             const entry = getEntryForSlot(slot.id);
             const score = entry?.score;
             const isExpanded = selectedSlot === slot.id;
-
-            return `
-                <div class="border rounded-xl overflow-hidden">
-                    <button onclick="selectSlot('${slot.id}')" class="w-full p-3 flex items-center justify-between transition-colors ${score ? 'bg-gray-50' : 'bg-purple-50 hover:bg-purple-100'}">
-                        <div class="flex items-center gap-3">
-                            <span class="text-2xl">${slot.icon}</span>
-                            <div class="text-left">
-                                <p class="font-medium text-gray-700">${slot.label}</p>
-                                <p class="text-xs text-gray-400">${slot.time}</p>
-                            </div>
-                        </div>
-                        ${score ? `
-                            <div class="w-12 h-12 rounded-full ${getScoreColor(score)} flex items-center justify-center">
-                                <span class="text-white font-bold text-lg">${score}</span>
-                            </div>
-                        ` : `
-                            <div class="w-12 h-12 rounded-full border-2 border-dashed border-purple-300 flex items-center justify-center">
-                                <span class="text-purple-300 text-xl">+</span>
-                            </div>
-                        `}
-                    </button>
-                    
-                    ${isExpanded ? `
-                        <div class="p-3 bg-gray-50 border-t">
-                            ${!pendingScore ? `
-                                <p class="text-sm text-gray-500 mb-2 text-center">How are you feeling?</p>
-                                <div class="grid grid-cols-5 gap-1">
-                                    ${[1,2,3,4,5,6,7,8,9,10].map(num => `
-                                        <button onclick="selectScore(${num})" class="score-btn p-2 rounded-lg font-bold text-white transition-transform hover:scale-110 ${getScoreColor(num)}">
-                                            ${num}
-                                        </button>
-                                    `).join('')}
-                                </div>
-                                <div class="flex justify-between mt-2 text-xs text-gray-400">
-                                    <span>😢 Low</span>
-                                    <span>High 😄</span>
-                                </div>
-                            ` : `
-                                <div class="flex items-center justify-center gap-2 mb-3">
-                                    <span class="text-2xl">${getScoreEmoji(pendingScore)}</span>
-                                    <div class="w-10 h-10 rounded-full ${getScoreColor(pendingScore)} flex items-center justify-center">
-                                        <span class="text-white font-bold">${pendingScore}</span>
-                                    </div>
-                                    <button onclick="pendingScore=null;render()" class="text-gray-400 text-sm hover:text-gray-600 ml-2">change</button>
-                                </div>
-                                <p class="text-sm text-gray-500 mb-2">Add a note (optional)</p>
-                                <textarea id="noteInput" oninput="noteText=this.value" placeholder="What's on your mind?" class="w-full p-2 border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-300" rows="3">${noteText}</textarea>
-                                <button onclick="saveEntry()" class="w-full mt-2 p-2 rounded-lg font-semibold text-white bg-purple-500 hover:bg-purple-600 transition-colors">
-                                    Save Entry
-                                </button>
-                            `}
-                            
-                            ${score && entry?.note && !pendingScore ? `
-                                <div class="mt-3 pt-3 border-t">
-                                    <p class="text-xs text-gray-400 mb-1">Previous note:</p>
-                                    <p class="text-sm text-gray-600 italic">"${entry.note}"</p>
-                                </div>
-                            ` : ''}
-                        </div>
-                    ` : ''}
-                </div>
-            `;
+            return `<div class="border rounded-xl overflow-hidden"><button onclick="selectSlot('${slot.id}')" class="w-full p-3 flex items-center justify-between transition-colors ${score ? 'bg-gray-50' : 'bg-purple-50 hover:bg-purple-100'}"><div class="flex items-center gap-3"><span class="text-2xl">${slot.icon}</span><div class="text-left"><p class="font-medium text-gray-700">${slot.label}</p><p class="text-xs text-gray-400">${slot.time}</p></div></div>${score ? `<div class="w-12 h-12 rounded-full ${getScoreColor(score)} flex items-center justify-center"><span class="text-white font-bold text-lg">${score}</span></div>` : `<div class="w-12 h-12 rounded-full border-2 border-dashed border-purple-300 flex items-center justify-center"><span class="text-purple-300 text-xl">+</span></div>`}</button>${isExpanded ? `<div class="p-3 bg-gray-50 border-t">${!pendingScore ? `<p class="text-sm text-gray-500 mb-2 text-center">How are you feeling?</p><div class="grid grid-cols-5 gap-1">${[1,2,3,4,5,6,7,8,9,10].map(num => `<button onclick="selectScore(${num})" class="score-btn p-2 rounded-lg font-bold text-white transition-transform hover:scale-110 ${getScoreColor(num)}">${num}</button>`).join('')}</div><div class="flex justify-between mt-2 text-xs text-gray-400"><span>😢 Low</span><span>High 😄</span></div>` : `<div class="flex items-center justify-center gap-2 mb-3"><span class="text-2xl">${getScoreEmoji(pendingScore)}</span><div class="w-10 h-10 rounded-full ${getScoreColor(pendingScore)} flex items-center justify-center"><span class="text-white font-bold">${pendingScore}</span></div><button onclick="pendingScore=null;render()" class="text-gray-400 text-sm hover:text-gray-600 ml-2">change</button></div><p class="text-sm text-gray-500 mb-2">Add a private note (optional)</p><textarea id="noteInput" oninput="noteText=this.value" placeholder="Just for you — not shared" class="w-full p-2 border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-300" rows="3">${noteText}</textarea><p class="text-xs text-gray-400 mt-1">🔒 Notes stay on your phone only</p><button onclick="saveEntry()" class="w-full mt-2 p-2 rounded-lg font-semibold text-white bg-purple-500 hover:bg-purple-600 transition-colors">Save Entry</button>`}${score && entry?.note && !pendingScore ? `<div class="mt-3 pt-3 border-t"><p class="text-xs text-gray-400 mb-1">Previous note:</p><p class="text-sm text-gray-600 italic">"${entry.note}"</p></div>` : ''}</div>` : ''}</div>`;
         };
 
         const renderExport = (app) => {
-            const allEntries = [...entries].sort((a, b) => {
-                if (a.date !== b.date) return a.date.localeCompare(b.date);
-                const slotOrder = ['morning', 'midmorning', 'afternoon', 'evening', 'night'];
-                return slotOrder.indexOf(a.slot) - slotOrder.indexOf(b.slot);
-            });
-
+            const allEntries = [...entries].sort((a, b) => { if (a.date !== b.date) return a.date.localeCompare(b.date); const slotOrder = ['morning', 'midmorning', 'afternoon', 'evening', 'night']; return slotOrder.indexOf(a.slot) - slotOrder.indexOf(b.slot); });
             const scores = allEntries.map(e => e.score);
             const avgScore = scores.length ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : 0;
             const minScore = scores.length ? Math.min(...scores) : 0;
             const maxScore = scores.length ? Math.max(...scores) : 0;
-
-            const byDate = {};
-            allEntries.forEach(e => {
-                if (!byDate[e.date]) byDate[e.date] = [];
-                byDate[e.date].push(e);
-            });
-
-            const dailyAvgs = Object.entries(byDate).map(([date, dayEntries]) => ({
-                date,
-                avg: (dayEntries.reduce((sum, e) => sum + e.score, 0) / dayEntries.length).toFixed(1),
-                count: dayEntries.length
-            }));
-
-            app.innerHTML = `
-                <button onclick="view='tracker';render()" class="flex items-center gap-2 text-purple-600 mb-4 hover:text-purple-800">
-                    <span>←</span> Back to Tracker
-                </button>
-
-                <div class="text-center mb-6">
-                    <h1 class="text-3xl font-bold text-purple-700 mb-1">Export Data</h1>
-                    <p class="text-purple-500">Share with your doctor</p>
-                </div>
-
-                ${allEntries.length ? `
-                    <div class="bg-white rounded-2xl p-4 mb-4 shadow-lg">
-                        <h2 class="text-lg font-semibold text-gray-700 mb-3">Summary</h2>
-                        <div class="grid grid-cols-2 gap-3">
-                            <div class="bg-purple-50 rounded-xl p-3 text-center">
-                                <p class="text-2xl font-bold text-purple-600">${avgScore}</p>
-                                <p class="text-xs text-gray-500">Average Score</p>
-                            </div>
-                            <div class="bg-purple-50 rounded-xl p-3 text-center">
-                                <p class="text-2xl font-bold text-purple-600">${allEntries.length}</p>
-                                <p class="text-xs text-gray-500">Total Entries</p>
-                            </div>
-                            <div class="bg-green-50 rounded-xl p-3 text-center">
-                                <p class="text-2xl font-bold text-green-600">${maxScore}</p>
-                                <p class="text-xs text-gray-500">Highest</p>
-                            </div>
-                            <div class="bg-red-50 rounded-xl p-3 text-center">
-                                <p class="text-2xl font-bold text-red-500">${minScore}</p>
-                                <p class="text-xs text-gray-500">Lowest</p>
-                            </div>
-                        </div>
-                        <div class="mt-3 pt-3 border-t">
-                            <p class="text-sm text-gray-500">Days tracked: ${Object.keys(byDate).length}</p>
-                        </div>
-                    </div>
-
-                    <div class="bg-white rounded-2xl p-4 mb-4 shadow-lg">
-                        <h2 class="text-lg font-semibold text-gray-700 mb-3">Daily Averages</h2>
-                        <div class="max-h-48 overflow-y-auto">
-                            ${dailyAvgs.map(d => `
-                                <div class="flex items-center justify-between py-2 border-b last:border-0">
-                                    <span class="text-sm text-gray-600">${formatDate(d.date)}</span>
-                                    <div class="flex items-center gap-2">
-                                        <div class="w-8 h-8 rounded-full ${getScoreColor(parseFloat(d.avg))} flex items-center justify-center">
-                                            <span class="text-white text-sm font-bold">${Math.round(d.avg)}</span>
-                                        </div>
-                                        <span class="text-xs text-gray-400">(${d.count})</span>
-                                    </div>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-
-                    <div class="bg-white rounded-2xl p-4 mb-4 shadow-lg">
-                        <h2 class="text-lg font-semibold text-gray-700 mb-3">Google Sheets</h2>
-                        <p class="text-sm text-gray-500 mb-3">✓ All entries are automatically synced to your Google Sheet. Share the spreadsheet link with your doctor.</p>
-                        <a href="https://docs.google.com/forms/d/1dqlwE-vA9MWUd2mYh2gzv9zGNuPl8aaCkE_pfUk5QWE/edit#responses" target="_blank" class="block w-full p-3 bg-green-500 text-white rounded-xl font-semibold text-center hover:bg-green-600 transition-colors">
-                            📊 Open Google Sheet
-                        </a>
-                    </div>
-                ` : `
-                    <div class="bg-white rounded-2xl p-6 shadow-lg text-center">
-                        <p class="text-gray-500">No data yet. Start logging your mood!</p>
-                    </div>
-                `}
-            `;
+            const byDate = {}; allEntries.forEach(e => { if (!byDate[e.date]) byDate[e.date] = []; byDate[e.date].push(e); });
+            const dailyAvgs = Object.entries(byDate).map(([date, dayEntries]) => ({ date, avg: (dayEntries.reduce((sum, e) => sum + e.score, 0) / dayEntries.length).toFixed(1), count: dayEntries.length }));
+            app.innerHTML = `<button onclick="view='tracker';render()" class="flex items-center gap-2 text-purple-600 mb-4 hover:text-purple-800"><span>←</span> Back to Tracker</button><div class="text-center mb-6"><h1 class="text-3xl font-bold text-purple-700 mb-1">Export Data</h1><p class="text-purple-500">Share with your doctor</p></div>${allEntries.length ? `<div class="bg-white rounded-2xl p-4 mb-4 shadow-lg"><h2 class="text-lg font-semibold text-gray-700 mb-3">Summary</h2><div class="grid grid-cols-2 gap-3"><div class="bg-purple-50 rounded-xl p-3 text-center"><p class="text-2xl font-bold text-purple-600">${avgScore}</p><p class="text-xs text-gray-500">Average Score</p></div><div class="bg-purple-50 rounded-xl p-3 text-center"><p class="text-2xl font-bold text-purple-600">${allEntries.length}</p><p class="text-xs text-gray-500">Total Entries</p></div><div class="bg-green-50 rounded-xl p-3 text-center"><p class="text-2xl font-bold text-green-600">${maxScore}</p><p class="text-xs text-gray-500">Highest</p></div><div class="bg-red-50 rounded-xl p-3 text-center"><p class="text-2xl font-bold text-red-500">${minScore}</p><p class="text-xs text-gray-500">Lowest</p></div></div><div class="mt-3 pt-3 border-t"><p class="text-sm text-gray-500">Days tracked: ${Object.keys(byDate).length}</p></div></div><div class="bg-white rounded-2xl p-4 mb-4 shadow-lg"><h2 class="text-lg font-semibold text-gray-700 mb-3">Daily Averages</h2><div class="max-h-48 overflow-y-auto">${dailyAvgs.map(d => `<div class="flex items-center justify-between py-2 border-b last:border-0"><span class="text-sm text-gray-600">${formatDate(d.date)}</span><div class="flex items-center gap-2"><div class="w-8 h-8 rounded-full ${getScoreColor(parseFloat(d.avg))} flex items-center justify-center"><span class="text-white text-sm font-bold">${Math.round(d.avg)}</span></div><span class="text-xs text-gray-400">(${d.count})</span></div></div>`).join('')}</div></div><div class="bg-white rounded-2xl p-4 mb-4 shadow-lg"><h2 class="text-lg font-semibold text-gray-700 mb-3">Google Sheets</h2><p class="text-sm text-gray-500 mb-2">✓ Scores sync automatically to Google Sheet</p><p class="text-sm text-gray-400 mb-3">🔒 Your notes stay private on your phone</p><a href="https://docs.google.com/forms/d/1dqlwE-vA9MWUd2mYh2gzv9zGNuPl8aaCkE_pfUk5QWE/edit#responses" target="_blank" class="block w-full p-3 bg-green-500 text-white rounded-xl font-semibold text-center hover:bg-green-600 transition-colors">📊 Open Google Sheet</a></div>` : `<div class="bg-white rounded-2xl p-6 shadow-lg text-center"><p class="text-gray-500">No data yet. Start logging your mood!</p></div>`}`;
         };
 
-        // Initialize
         loadFromStorage();
         render();
     </script>
